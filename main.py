@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import cmath
 import cv2
@@ -6,7 +8,7 @@ import sys
 # CONTROL PLANE
 IMAGE_FILENAME = 'froggohhh.jpg'
 OUTPUT_FILENAME = 'out.txt'
-COEFF_COUNT = 200
+COEFF_COUNT = 100
 SCALE_FACTOR = 2
 SHOW_OUTPUT = False
 
@@ -44,7 +46,7 @@ def image_binary(img, threshold=127, cross_filtering=True):
 def ftransform(x, y, n_coeffs: int, scale_factor: float = 1):
     assert len(x) == len(y)
     n_elems = len(x)
-    t = np.linspace(0, 1, n_coeffs)
+    t = np.linspace(0, 1, n_elems)
     fc = [scale_factor * complex(x[i], y[i]) for i in range(n_elems)]
     out = np.empty(shape=(2 * n_coeffs + 1,), dtype=FourierCoefficient)
     for n in range(-n_coeffs, n_coeffs + 1):
@@ -56,33 +58,102 @@ def ftransform(x, y, n_coeffs: int, scale_factor: float = 1):
 
 
 def image_to_curve(img):
-    x = []
-    y = []
+    curve_x = []
+    curve_y = []
+
+    # extending img matrix to avoid indexes overflow
+    w_img = img.shape[1]
+    h_img = img.shape[0]
+    tmp_img = np.ones(shape=(h_img + 2, w_img + 2))
+    for i in range(h_img):
+        for j in range(w_img):
+            tmp_img[i + 1, j + 1] = img[i, j]
+    img = tmp_img
 
     # finding the starting point
-    starting_point = np.where(img == 0)[0]
-    x.append(starting_point[1])
-    y.append(starting_point[0])
+    starting_point = np.argwhere(img == 0)[0]
+    x = starting_point[1]
+    y = starting_point[0]
 
-    return x, y
+    # finding first velocity
+    vx = 1
+    vy = 0
+    mid_norm = 1 / math.sqrt(2)  # this 'mid_norm' correction is to keep velocity magnitude to 1
+
+    # here the algorith starts
+    while True:
+        # saving the current point
+        curve_x.append(x)
+        curve_y.append(y)
+        # looking for best next point near the current, using as metric dot product between velocity vectors
+        # v0 dot v1. the best value will tell which point will be the next
+        score = -10
+        next_x = 0
+        next_y = 0
+        next_vx = 0
+        next_vy = 0
+        for i in range(y - 1, y + 2):  # -1 0 +1 (+1 to include the end)
+            for j in range(x - 1, x + 2):
+                if img[i, j] != 0:
+                    continue
+                if i == y and j == x:
+                    continue
+                dx = j - x
+                dy = i - y
+                norm = np.linalg.norm([dx, dy])
+                vx2 = dx / norm  # if dy == 0 else dx * mid_norm
+                vy2 = dy / norm  # if dx == 0 else dy * mid_norm
+                dot = vx * vx2 + vy * vy2
+                if dot > score:
+                    score = dot
+                    next_x = j
+                    next_y = i
+                    next_vx = vx2
+                    next_vy = vy2
+
+        # if the best point is the starting point of the curve, then the curve is built
+        if next_x == starting_point[1] and next_y == starting_point[0]:
+            break
+        # if the best point is the current one, it means that the curve is not closed, and so it returns
+        if x == next_x and y == next_y:
+            break
+
+        # sets the new current values
+        x = next_x
+        y = next_y
+        vx = next_vx
+        vy = next_vy
+
+    return curve_x, curve_y
 
 
 if __name__ == '__main__':
+    # tests
+
     # working on the image in order to make it binary
     image = cv2.imread(IMAGE_FILENAME)
     binimg = image_binary(image, cross_filtering=False, threshold=60)
 
     # getting a one-line closed curve
-    x, y = image_to_curve(binimg)
+    curve_x, curve_y = image_to_curve(binimg)
+
+    # show a test output
+    out_curve = np.ones(shape=binimg.shape)
+    print(len(curve_x))
+    for c in range(len(curve_x)):
+        out_curve[curve_y[c] - 1, curve_x[c] - 1] = 0
+    # cv2.imwrite("imgout.jpg", cv2.cvtColor(out_curve.astype(np.uint8), cv2.COLOR_GRAY2BGR))
+    cv2.imshow("Test output", out_curve)
+    cv2.waitKey(0)
 
     # getting fourier coefficients
-    coeffs = ftransform(x, y, n_coeffs=COEFF_COUNT, scale_factor=SCALE_FACTOR)
+    coeffs = ftransform(curve_x, curve_y, n_coeffs=COEFF_COUNT, scale_factor=SCALE_FACTOR)
 
     # printing coefficients on the output file
     stdout_bak = sys.stdout
     with open(OUTPUT_FILENAME, 'w') as file:
         sys.stdout = file
         print(f'{COEFF_COUNT * 2}')
-        for cn in coeffs:
-            print(f'{cn.frequency} {cn.phase} {cn.magnitude}')
+        for i in range(1, len(coeffs)):
+            print(f'{coeffs[i].frequency} {coeffs[i].phase} {coeffs[i].magnitude}')
     sys.stdout = stdout_bak
