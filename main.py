@@ -57,7 +57,7 @@ def ftransform(x, y, n_coeffs: int, scale_factor: float = 1):
     return out
 
 
-def image_to_curve(img):
+def image_to_curve(img, plot_curve=True):
     curve_x = []
     curve_y = []
 
@@ -75,21 +75,18 @@ def image_to_curve(img):
     x = starting_point[1]
     y = starting_point[0]
 
-    # finding first velocity
+    # here the algorith starts
     vx = 1
     vy = 0
-    mid_norm = 1 / math.sqrt(2)  # this 'mid_norm' correction is to keep velocity magnitude to 1
-
-    # here the algorith starts
     while True:
         # saving the current point
         curve_x.append(x)
         curve_y.append(y)
         # looking for best next point near the current, using as metric dot product between velocity vectors
         # v0 dot v1. the best value will tell which point will be the next
-        score = -10
-        next_x = 0
-        next_y = 0
+        score = -1
+        next_x = x
+        next_y = y
         next_vx = 0
         next_vy = 0
         for i in range(y - 1, y + 2):  # -1 0 +1 (+1 to include the end)
@@ -101,8 +98,8 @@ def image_to_curve(img):
                 dx = j - x
                 dy = i - y
                 norm = np.linalg.norm([dx, dy])
-                vx2 = dx / norm  # if dy == 0 else dx * mid_norm
-                vy2 = dy / norm  # if dx == 0 else dy * mid_norm
+                vx2 = dx / norm
+                vy2 = dy / norm
                 dot = vx * vx2 + vy * vy2
                 if dot > score:
                     score = dot
@@ -110,7 +107,6 @@ def image_to_curve(img):
                     next_y = i
                     next_vx = vx2
                     next_vy = vy2
-
         # if the best point is the starting point of the curve, then the curve is built
         if next_x == starting_point[1] and next_y == starting_point[0]:
             break
@@ -132,7 +128,8 @@ if __name__ == '__main__':
 
     # working on the image in order to make it binary
     image = cv2.imread(IMAGE_FILENAME)
-    binimg = image_binary(image, cross_filtering=False, threshold=60)
+    binimg = image_binary(image, cross_filtering=False, threshold=150)
+    cv2.imwrite("binimg.bmp", binimg)
 
     # getting a one-line closed curve
     curve_x, curve_y = image_to_curve(binimg)
@@ -142,7 +139,13 @@ if __name__ == '__main__':
     print(len(curve_x))
     for c in range(len(curve_x)):
         out_curve[curve_y[c] - 1, curve_x[c] - 1] = 0
-    # cv2.imwrite("imgout.jpg", cv2.cvtColor(out_curve.astype(np.uint8), cv2.COLOR_GRAY2BGR))
+
+    # img = np.stack((out_curve,) * 3, -1)
+    # img = img.astype(np.uint8)
+    # grayed = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # thresh = cv2.threshold(grayed, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+    # cv2.imwrite("imgout.bmp", thresh)
+
     cv2.imshow("Test output", out_curve)
     cv2.waitKey(0)
 
