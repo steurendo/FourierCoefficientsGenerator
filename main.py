@@ -6,7 +6,7 @@ import cv2
 import sys
 
 # CONTROL PLANE
-IMAGE_FILENAME = 'froggohhh.jpg'
+IMAGE_FILENAME = 'testimg.jpg'
 OUTPUT_FILENAME = 'out.txt'
 COEFF_COUNT = 100
 SCALE_FACTOR = 2
